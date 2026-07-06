@@ -124,7 +124,7 @@ vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
   float shape = smoothstep(shapeLo, shapeLo + 0.38, flow);
   float density = shape * env * 2.4 + smoothstep(topH * 0.55, 0.0, uv.y) * baseAmt;
   float d = density - 0.5;
-  float alpha = clamp(smoothstep(-0.22, 0.14, d), 0.0, 1.0);
+  float alpha = clamp(smoothstep(-0.34, 0.16, d), 0.0, 1.0); // wider -> softer blur
 
   // twisting colour from the same flow
   float s = smoothstep(0.30, 0.70, flow) + 0.05;
