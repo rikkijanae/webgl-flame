@@ -30,6 +30,7 @@ void main() {
 </script>
 
 <script id="frag" type="x-shader/x-fragment">
+#extension GL_OES_standard_derivatives : enable
 precision highp float;
 
 uniform vec2  u_resolution;
@@ -71,6 +72,17 @@ float fbm(vec2 p){
   }
   return v;
 }
+// low-octave fbm -> smooth, clean shapes with no high-frequency fuzz on the edge
+float fbm3(vec2 p){
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 3; i++){
+    v += a * noise(p);
+    p = p * 2.0 + 7.0;
+    a *= 0.5;
+  }
+  return v;
+}
 
 // Cyclic palette running blue -> pink -> red -> orange -> yellow -> white ->
 // pink -> blue. Starts and ends on blue so it tiles seamlessly with fract().
@@ -86,21 +98,27 @@ vec3 meshPalette(float h){
   return c;
 }
 
-// Silky, flowing gradient mesh that fills the flame shape: soft wavy colour
-// bands drifting upward, like a chromatic light-leak.
+// Silky gradient mesh: clean directional STRIPE bands that slowly wave, drift
+// and swing their direction over time (never breaking into random patches).
 vec3 flameMesh(vec2 uv, float aspect, float t){
   vec2 q = vec2((uv.x - 0.5) * aspect, uv.y);
 
-  // wavy horizontal-ish colour bands, warped and drifting upward
-  float warp = fbm(vec2(q.x * 1.2, q.y * 1.8 - t * 0.5)) - 0.5;
-  float bcoord = q.y * 3.3 + warp * 2.6 + q.x * 0.45 + t * 0.55;
-  float h = fract(bcoord);
+  // the stripe direction slowly swings, so the bands travel in different
+  // directions over time while staying coherent stripes
+  float ang = 1.15 + 0.55 * sin(t * 0.15);
+  vec2 dir = vec2(cos(ang), sin(ang));
+
+  // gentle, low-frequency wave along the stripes -> silky, not random
+  float wave = fbm3(q * 1.1 + vec2(0.0, -t * 0.35)) - 0.5;
+
+  float coord = dot(q, dir) * 2.7 + wave * 1.6 + t * 0.22;
+  float h = fract(coord);
 
   vec3 col = meshPalette(h);
 
-  // extra soft white highlights where two slow fields overlap
-  float g = fbm(q * vec2(1.2, 2.2) + 20.0) * fbm(q * vec2(0.8, 1.6) + 5.0);
-  col = mix(col, WHITE, smoothstep(0.34, 0.62, g));
+  // a second, softer stripe set drifting the other way adds depth (still banded)
+  float coord2 = dot(q, vec2(-dir.y, dir.x)) * 1.7 - t * 0.13 + wave * 1.1;
+  col = mix(col, meshPalette(fract(coord2)), 0.32);
   return col;
 }
 
@@ -108,27 +126,28 @@ void main(){
   vec2 uv = gl_FragCoord.xy / u_resolution.xy;      // 0..1, y up
   float aspect = u_resolution.x / u_resolution.y;
 
-  float t = u_time * 0.34;
+  float t = u_time * 0.12;                            // slow, silky fire
 
   vec2 p = vec2((uv.x - 0.5) * aspect, uv.y);        // centred x, y up
 
-  // curling domain warp, scrolling upward -> licking, swirling motion
+  // gentle, slow, low-frequency domain warp -> smooth curling (no fuzz)
   vec2 warp;
-  warp.x = fbm(p * 1.8 + vec2(1.0, -t * 1.1)) - 0.5;
-  warp.y = fbm(p * 1.8 + vec2(7.0, -t * 1.4) + 4.0) - 0.5;
-  vec2 pw = p + warp * 0.85;
+  warp.x = fbm3(p * 1.3 + vec2(1.0, -t * 0.9)) - 0.5;
+  warp.y = fbm3(p * 1.3 + vec2(7.0, -t * 1.1) + 4.0) - 0.5;
+  vec2 pw = p + warp * 0.6;
 
   // cursor bends the plume sideways toward it, more toward the tips
   vec2 m = vec2((u_mouse.x - 0.5) * aspect, u_mouse.y);
   pw.x -= m.x * smoothstep(0.0, 0.5, uv.y) * 0.22 * u_mouseAmt;
 
-  // rising flame noise -> tall, distinct tongues. features are stretched
-  // vertically (low y-frequency) so they read as licking ribbons, not blobs.
-  float n = fbm(vec2(pw.x * 3.2, pw.y * 1.05 - t * 2.0));
-  n = n * 0.7 + fbm(vec2(pw.x * 6.0, pw.y * 2.1 - t * 2.9) + 11.0) * 0.3;
+  // flame shape from SMOOTH low-octave noise -> clean silhouette, no feathering.
+  // stretched vertically so it reads as tall licking tongues.
+  float n = fbm3(vec2(pw.x * 3.2, pw.y * 0.85 - t * 1.0));
+  n += (fbm3(vec2(pw.x * 6.4, pw.y * 1.6 - t * 1.3) + 21.0) - 0.5) * 0.35;
+  n = smoothstep(0.26, 0.74, n);                      // contrast -> defined tongues
 
   // vertical envelope: fire is strong at the base and tapers as it climbs
-  float band = 0.42;
+  float band = 0.5;
   float by = uv.y / band;
   float taper = smoothstep(1.5, -0.05, by);
 
@@ -136,14 +155,18 @@ void main(){
   float dx = (uv.x - u_mouse.x) * aspect;
   taper += exp(-dx * dx * 5.0) * u_mouseAmt * (0.12 + u_mouse.y * 0.8);
 
-  // flame density field -> a SOLID silhouette (defined edge), not a soft fade.
+  // flame density field
   float raw = n * taper;
   // continuous solid base full-width, so the flames read as one connected form
-  // rather than disconnected blobs; tongues still rise out of it.
   raw += smoothstep(0.34, 0.0, by) * 0.42;
-  float alpha = smoothstep(0.34, 0.43, raw);           // tight edge = solid shape
 
-  // fill the solid shape with the flowing gradient mesh
+  // HARD, pixel-crisp edge: clip the field at a threshold with ~1px anti-alias
+  // (derivative-based) so the shape is sharply defined, not a soft dissolve.
+  float edge = raw - 0.46;
+  float aa = max(fwidth(edge), 1e-4);
+  float alpha = smoothstep(-aa, aa, edge);
+
+  // fill the solid shape with the flowing stripe mesh
   vec3 mesh = flameMesh(uv, aspect, t);
 
   vec3 col = mix(WHITE, mesh, alpha);
@@ -159,6 +182,7 @@ void main(){
 (function () {
   const canvas = document.getElementById('gl');
   const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (gl) gl.getExtension('OES_standard_derivatives'); // for fwidth() hard edges
   if (!gl) {
     document.body.innerHTML =
       '<p style="font-family:sans-serif;padding:2rem">WebGL is not available in this browser.</p>';

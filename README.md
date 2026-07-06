@@ -33,18 +33,25 @@ python3 -m http.server 8000
 ## How it works
 
 A full‑screen fragment shader builds a **solid flame silhouette** and fills it
-with a **flowing gradient mesh**:
+with a **flowing striped gradient mesh**. Everything moves slowly for a silky,
+slow‑fire feel:
 
-- vertically‑stretched **value‑noise** (quintic‑smoothed fbm) scrolls upward and
-  is pushed through a curling **domain‑warp**, giving tall, licking flame tongues;
-  a full‑width solid base keeps them a single connected form,
-- a tight `smoothstep` on the density gives a **defined edge** — a solid shape
-  sitting on the page, not a soft dissolve,
-- the fill is a separate **gradient mesh**: soft wavy colour bands, warped and
-  drifting upward, running a cyclic palette blue → pink → red → orange → yellow →
-  white with extra white hotspots — a silky chromatic light‑leak,
+- the shape comes from **smooth low‑octave value‑noise** (few octaves, quintic‑
+  smoothed) stretched vertically and gently domain‑warped — clean curves, no
+  high‑frequency fuzz; a full‑width solid base keeps the tongues one connected
+  form,
+- the edge is **hard‑clipped**: the density field is thresholded with a
+  derivative‑based (`fwidth`) ~1‑pixel anti‑alias, so the silhouette is sharply
+  defined — clipped, not a soft dissolve,
+- the fill is a separate **stripe mesh**: two sets of clean colour bands running a
+  cyclic palette blue → pink → red → orange → yellow → white, slowly waving and
+  swinging their direction over time so the stripes travel in different directions
+  while never breaking into random patches,
 - the cursor bends the tongues toward it and feeds them extra height,
 - a touch of dither removes any residual 8‑bit banding.
+
+Requires the `OES_standard_derivatives` WebGL extension (universal on modern
+browsers) for the hard edge.
 
 The cursor position is smoothed in JS and passed to the shader as a uniform. Touch
 is supported too.
