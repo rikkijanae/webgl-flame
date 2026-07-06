@@ -34,12 +34,13 @@ python3 -m http.server 8000
 
 A full‑screen fragment shader paints the ribbon:
 
-- three layered, slow, low‑frequency **value‑noise** fields (quintic‑smoothed fbm)
-  drift in different directions to give a silky, flowing motion,
+- vertically‑stretched **value‑noise** (quintic‑smoothed fbm) scrolls upward, so
+  the pattern and colour appear to rise into the flames,
+- a horizontal **domain‑warp** curls the tongues into sweeping flame swoops,
 - **heat** falls off up the bottom quarter of the screen, so every colour gets a
-  generous slice of height,
-- a gentle wavy **drift** makes the flame front breathe — faded out at the base so
-  the blue foundation stays solid,
+  generous slice of height; the rising turbulence pushes the flame front up into
+  licking tongues — with its amplitude faded out at the base so the blue
+  foundation stays solid,
 - the cursor adds a soft Gaussian **bump** to the heat, drawing the flames upward
   toward it,
 - heat is mapped through a **wide, overlapping colour ramp** and a touch of dither

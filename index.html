@@ -89,26 +89,25 @@ void main(){
   vec2 uv = gl_FragCoord.xy / u_resolution.xy;      // 0..1, y up
   float aspect = u_resolution.x / u_resolution.y;
 
-  float t = u_time * 0.11;                           // slow -> silky
-
-  // low-frequency flowing noise fields, drifting in different directions
-  vec2 p = vec2(uv.x * aspect, uv.y);
-  float n1 = fbm(p * 1.5 + vec2( t,       -t * 0.6));
-  float n2 = fbm(p * 2.3 + vec2(-t * 0.8,  t * 0.4) + 11.3);
-  float n3 = fbm(p * 0.8 + vec2( t * 0.3,  t * 0.2) + 4.0);
-  float flow = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;       // ~0..1, smooth
+  float t = u_time * 0.5;
 
   // the fire lives in the bottom quarter of the screen
   float band = 0.25;
   float by = uv.y / band;                            // 0 at bottom, 1 at band top
 
-  // heat falls off (roughly) linearly up the band so every colour gets its
-  // own generous slice of height -> a full, seamless flame gradient
-  float heat = 1.0 - by;
+  // horizontal domain-warp (also scrolling upward) -> curling flame swoops
+  float warp = fbm(vec2(uv.x * aspect * 1.3, uv.y * 1.5 - t * 0.6)) - 0.5;
 
-  // gentle wavy drift so the flame front breathes and licks, Stripe-smooth.
-  // faded out near the base so the blue hot foundation stays solid & even.
-  heat += (flow - 0.5) * 0.42 * smoothstep(0.0, 0.45, by);
+  // big, vertically-stretched tongues that scroll UPWARD, so the whole pattern
+  // and colour appear to rise into the flames
+  vec2 q = vec2(uv.x * aspect * 1.7 + warp * 1.3, uv.y * 1.4 - t * 1.05);
+  float turb = fbm(q) * 0.78 + fbm(q * 2.4 + 15.0) * 0.22;
+
+  // heat: hot base easing up the band, with the turbulence pushing the front
+  // up into licking tongues. Amplitude grows with height so the blue base
+  // stays solid while the tips lick and swoop.
+  float amp = smoothstep(0.0, 0.42, by);
+  float heat = (1.0 - by) + (turb - 0.5) * 1.55 * amp;
 
   // the cursor draws the flames upward toward it, locally & smoothly
   float dx = (uv.x - u_mouse.x) * aspect;
