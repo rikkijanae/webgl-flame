@@ -124,10 +124,14 @@ vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
   // carve real flame tongues into the front: perturb it with finer, vertically-
   // biased detail (so tongues are tall & thin) then sharpen so tips come to a
   // point, the U-shaped notches cut deep into the body, and licks split into forks
-  float ff = flow + (fbm3(vec2(fq.x * 3.4, fq.y * 1.6) + 12.0) - 0.5) * 0.30;
-  ff += (fbm3(vec2(fq.x * 7.0, fq.y * 3.0) + 60.0) - 0.5) * 0.15; // finer forks
-  float shape = smoothstep(shapeLo, shapeLo + 0.34, ff);
-  shape = pow(shape, 1.35);                             // pointed tips, deep notches
+  // build a front that is ALWAYS undulating (never flat) and forks everywhere:
+  // a mid wave so it never plateaus + tongue detail + fine high-frequency forks
+  float ff = flow;
+  ff += (fbm3(vec2(fq.x * 2.1, fq.y * 1.1) + 5.0)  - 0.5) * 0.26; // never flat
+  ff += (fbm3(vec2(fq.x * 4.6, fq.y * 1.9) + 12.0) - 0.5) * 0.26; // tongues
+  ff += (fbm3(vec2(fq.x * 9.5, fq.y * 3.4) + 60.0) - 0.5) * 0.22; // constant forks
+  float shape = smoothstep(shapeLo, shapeLo + 0.30, ff);
+  shape = pow(shape, 1.45);                             // pointed tips, deep notches
   float density = shape * env * 2.4 + smoothstep(0.022, 0.0, uv.y) * baseAmt;
   float d = density - 0.5;
   float alpha = clamp(smoothstep(-0.34, 0.16, d), 0.0, 1.0); // wider -> softer blur
@@ -160,7 +164,7 @@ void main(){
   vec2 uv = gl_FragCoord.xy / u_resolution.xy;      // 0..1, y up
   float aspect = u_resolution.x / u_resolution.y;
 
-  float tt = u_time * 0.25;                           // global speed knob (lower = slower)
+  float tt = u_time * 0.18;                           // global speed knob (lower = slower)
   float t  = tt * 0.075;                              // slow morph
 
   // cursor locally lifts the fire (pulls flames AND their colour up together)
