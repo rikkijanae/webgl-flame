@@ -169,19 +169,19 @@ void main(){
 
   // far background: low, slow, sparser dim flames (not a broad pale wash)
   vec4 L0 = flameLayer(uv, aspect, tt, t, 17.3, 1.05, 1.15, 0.52,
-                       0.045 + lift, 0.34, 0.40, 0.30);
+                       0.025 + lift, 0.34, 0.40, 0.30);
   outc = mix(outc, L0.rgb, L0.a * 0.9);
   cov *= 1.0 - L0.a * 0.9;
 
   // midground: the main body of the fire
   vec4 L1 = flameLayer(uv, aspect, tt, t, 0.0, 1.7, 1.5, 0.66,
-                       0.075 + lift, 0.58, 0.26, 0.0);
+                       0.045 + lift, 0.58, 0.26, 0.0);
   outc = mix(outc, L1.rgb, L1.a);
   cov *= 1.0 - L1.a;
 
   // foreground: taller, sharper, faster, sparser tongues out in front
   vec4 L2 = flameLayer(uv, aspect, tt, t, 5.7, 2.35, 1.9, 0.85,
-                       0.10 + lift, 0.34, 0.42, 0.0);
+                       0.065 + lift, 0.34, 0.42, 0.0);
   outc = mix(outc, L2.rgb, L2.a);
   cov *= 1.0 - L2.a;
 
