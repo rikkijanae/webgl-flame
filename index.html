@@ -72,17 +72,36 @@ float fbm(vec2 p){
   return v;
 }
 
-// temperature (0..1, 1 = hottest) -> colour of the flame *body*. The thin outer
-// edge (amber) is faded into white by the alpha, so this never starts at white
-// and there are no horizontal colour rings.
-vec3 grad(float h){
-  h = clamp(h, 0.0, 1.0);
-  vec3 c = AMBER;
-  c = mix(c, ORANGE, smoothstep(0.00, 0.34, h));
-  c = mix(c, PINK,   smoothstep(0.28, 0.56, h));
-  c = mix(c, RED,    smoothstep(0.52, 0.78, h));
-  c = mix(c, BLUE,   smoothstep(0.84, 1.00, h)); // hottest cores -> blue
+// Cyclic palette running blue -> pink -> red -> orange -> yellow -> white ->
+// pink -> blue. Starts and ends on blue so it tiles seamlessly with fract().
+vec3 meshPalette(float h){
+  vec3 c = BLUE;
+  c = mix(c, PINK,   smoothstep(0.00, 0.16, h));
+  c = mix(c, RED,    smoothstep(0.16, 0.32, h));
+  c = mix(c, ORANGE, smoothstep(0.32, 0.46, h));
+  c = mix(c, AMBER,  smoothstep(0.46, 0.58, h));
+  c = mix(c, WHITE,  smoothstep(0.58, 0.70, h));
+  c = mix(c, PINK,   smoothstep(0.70, 0.84, h));
+  c = mix(c, BLUE,   smoothstep(0.84, 1.00, h));
   return c;
+}
+
+// Silky, flowing gradient mesh that fills the flame shape: soft wavy colour
+// bands drifting upward, like a chromatic light-leak.
+vec3 flameMesh(vec2 uv, float aspect, float t){
+  vec2 q = vec2((uv.x - 0.5) * aspect, uv.y);
+
+  // wavy horizontal-ish colour bands, warped and drifting upward
+  float warp = fbm(vec2(q.x * 1.2, q.y * 1.8 - t * 0.5)) - 0.5;
+  float bcoord = q.y * 3.3 + warp * 2.6 + q.x * 0.45 + t * 0.55;
+  float h = fract(bcoord);
+
+  vec3 col = meshPalette(h);
+
+  // extra soft white highlights where two slow fields overlap
+  float g = fbm(q * vec2(1.2, 2.2) + 20.0) * fbm(q * vec2(0.8, 1.6) + 5.0);
+  col = mix(col, WHITE, smoothstep(0.34, 0.62, g));
+  return col;
 }
 
 void main(){
@@ -105,11 +124,11 @@ void main(){
 
   // rising flame noise -> tall, distinct tongues. features are stretched
   // vertically (low y-frequency) so they read as licking ribbons, not blobs.
-  float n = fbm(vec2(pw.x * 3.6, pw.y * 1.25 - t * 2.0));
-  n = n * 0.64 + fbm(vec2(pw.x * 7.0, pw.y * 2.5 - t * 2.9) + 11.0) * 0.36;
+  float n = fbm(vec2(pw.x * 3.2, pw.y * 1.05 - t * 2.0));
+  n = n * 0.7 + fbm(vec2(pw.x * 6.0, pw.y * 2.1 - t * 2.9) + 11.0) * 0.3;
 
   // vertical envelope: fire is strong at the base and tapers as it climbs
-  float band = 0.44;
+  float band = 0.42;
   float by = uv.y / band;
   float taper = smoothstep(1.5, -0.05, by);
 
@@ -117,20 +136,17 @@ void main(){
   float dx = (uv.x - u_mouse.x) * aspect;
   taper += exp(-dx * dx * 5.0) * u_mouseAmt * (0.12 + u_mouse.y * 0.8);
 
-  // flame density field. colour is driven by THIS (a 2D shape), not by height,
-  // so hot & cool interleave along the flames instead of forming stripes.
+  // flame density field -> a SOLID silhouette (defined edge), not a soft fade.
   float raw = n * taper;
+  // continuous solid base full-width, so the flames read as one connected form
+  // rather than disconnected blobs; tongues still rise out of it.
+  raw += smoothstep(0.34, 0.0, by) * 0.42;
+  float alpha = smoothstep(0.34, 0.43, raw);           // tight edge = solid shape
 
-  // solid flame body with a soft edge that dissolves into white
-  float alpha = smoothstep(0.22, 0.48, raw);
-  // temperature within the body: dense cores run hottest (-> blue)
-  float temp  = smoothstep(0.28, 0.72, raw);
-  // the base of the flames is the hottest part -> drive the densest cores near
-  // the base up into blue (gated on density so it's punchy accents, not a slab)
-  temp += smoothstep(0.30, 0.0, by) * 0.36 * smoothstep(0.34, 0.60, raw);
-  temp = clamp(temp, 0.0, 1.0);
+  // fill the solid shape with the flowing gradient mesh
+  vec3 mesh = flameMesh(uv, aspect, t);
 
-  vec3 col = mix(WHITE, grad(temp), alpha);
+  vec3 col = mix(WHITE, mesh, alpha);
 
   // fine dither to eliminate any 8-bit colour banding
   col += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * (1.6 / 255.0);

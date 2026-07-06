@@ -32,19 +32,17 @@ python3 -m http.server 8000
 
 ## How it works
 
-A full‑screen fragment shader builds a **flame density field** and colours it:
+A full‑screen fragment shader builds a **solid flame silhouette** and fills it
+with a **flowing gradient mesh**:
 
 - vertically‑stretched **value‑noise** (quintic‑smoothed fbm) scrolls upward and
-  is pushed through a curling **domain‑warp**, giving tall, licking, swirling
-  flame tongues that rise,
-- a soft vertical envelope keeps the fire strong at the base and tapering as it
-  climbs; a `smoothstep` on the density turns it into **solid flame bodies with
-  soft edges that dissolve into white**,
-- crucially, colour is driven by the **density (a 2‑D shape), not by height** — so
-  hot and cool interleave along each flame like a real fire, instead of forming
-  horizontal stripes,
-- the densest cores near the base are the hottest and glow **blue**; edges cool
-  through red → pink → orange → amber and fade out,
+  is pushed through a curling **domain‑warp**, giving tall, licking flame tongues;
+  a full‑width solid base keeps them a single connected form,
+- a tight `smoothstep` on the density gives a **defined edge** — a solid shape
+  sitting on the page, not a soft dissolve,
+- the fill is a separate **gradient mesh**: soft wavy colour bands, warped and
+  drifting upward, running a cyclic palette blue → pink → red → orange → yellow →
+  white with extra white hotspots — a silky chromatic light‑leak,
 - the cursor bends the tongues toward it and feeds them extra height,
 - a touch of dither removes any residual 8‑bit banding.
 
