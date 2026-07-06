@@ -45,6 +45,7 @@ const vec3 PINK   = vec3(0.973, 0.102, 0.490); // #F81A7D
 const vec3 RED    = vec3(0.945, 0.043, 0.039); // #F10B0A
 const vec3 BLUE   = vec3(0.216, 0.761, 0.925); // #37C2EC  (hottest)
 const vec3 WHITE  = vec3(1.0);
+const vec3 BLACK  = vec3(0.02, 0.02, 0.035);   // near-black for black flames
 
 // --- smooth value noise ----------------------------------------------------
 float hash(vec2 p){
@@ -141,6 +142,10 @@ vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
   float rim = smoothstep(0.30, 0.0, d);
   col = mix(col, smoothPalette(clamp(s + 0.26, 0.0, 0.95)), rim * 0.5);
 
+  // black flames: coherent dark regions in the coolest, low-flow folds
+  float dark = smoothstep(0.40, 0.24, flow) * smoothstep(0.30, 0.50, b.x);
+  col = mix(col, BLACK, dark * 0.92);
+
   col = mix(col, WHITE, haze);        // atmospheric haze -> sits further back
   return vec4(col, alpha);
 }
@@ -154,7 +159,7 @@ void main(){
 
   // cursor locally lifts the fire (pulls flames AND their colour up together)
   float dx = (uv.x - u_mouse.x) * aspect;
-  float lift = exp(-dx * dx * 4.0) * u_mouseAmt * (0.04 + u_mouse.y * 0.10);
+  float lift = exp(-dx * dx * 1.8) * u_mouseAmt * (0.18 + u_mouse.y * 0.40);
 
   // --- DEPTH: three layers of fire composited back-to-front. Background flames
   // sit lower, drift slower and are hazier; foreground flames are taller,
@@ -282,7 +287,7 @@ void main(){
   const start = performance.now();
   function frame(now) {
     resize();
-    const k = 0.05; // smoothing -> unhurried, Stripe-like response
+    const k = 0.10; // smoothing -> responsive but still eased
     current.x += (target.x - current.x) * k;
     current.y += (target.y - current.y) * k;
     current.amt += (target.amt - current.amt) * k;
