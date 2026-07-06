@@ -164,7 +164,7 @@ void main(){
   vec2 uv = gl_FragCoord.xy / u_resolution.xy;      // 0..1, y up
   float aspect = u_resolution.x / u_resolution.y;
 
-  float tt = u_time * 0.18;                           // global speed knob (lower = slower)
+  float tt = u_time * 0.12;                           // global speed knob (lower = slower)
   float t  = tt * 0.075;                              // slow morph
 
   // cursor locally lifts the fire (pulls flames AND their colour up together)
