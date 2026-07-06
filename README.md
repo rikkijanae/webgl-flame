@@ -32,20 +32,21 @@ python3 -m http.server 8000
 
 ## How it works
 
-A full‑screen fragment shader paints the ribbon:
+A full‑screen fragment shader builds a **flame density field** and colours it:
 
-- vertically‑stretched **value‑noise** (quintic‑smoothed fbm) scrolls upward, so
-  the pattern and colour appear to rise into the flames,
-- a horizontal **domain‑warp** curls the tongues into sweeping flame swoops,
-- **heat** falls off up the bottom quarter of the screen, so every colour gets a
-  generous slice of height; the rising turbulence pushes the flame front up into
-  licking tongues — with its amplitude faded out at the base so the blue
-  foundation stays solid,
-- the cursor adds a soft Gaussian **bump** to the heat, drawing the flames upward
-  toward it,
-- heat is mapped through a **wide, overlapping colour ramp** and a touch of dither
-  is added to eliminate 8‑bit banding — so the whole thing reads as one seamless
-  gradient instead of contour lines.
+- vertically‑stretched **value‑noise** (quintic‑smoothed fbm) scrolls upward and
+  is pushed through a curling **domain‑warp**, giving tall, licking, swirling
+  flame tongues that rise,
+- a soft vertical envelope keeps the fire strong at the base and tapering as it
+  climbs; a `smoothstep` on the density turns it into **solid flame bodies with
+  soft edges that dissolve into white**,
+- crucially, colour is driven by the **density (a 2‑D shape), not by height** — so
+  hot and cool interleave along each flame like a real fire, instead of forming
+  horizontal stripes,
+- the densest cores near the base are the hottest and glow **blue**; edges cool
+  through red → pink → orange → amber and fade out,
+- the cursor bends the tongues toward it and feeds them extra height,
+- a touch of dither removes any residual 8‑bit banding.
 
 The cursor position is smoothed in JS and passed to the shader as a uniform. Touch
 is supported too.
