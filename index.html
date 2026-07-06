@@ -84,41 +84,48 @@ float fbm3(vec2 p){
   return v;
 }
 
-// Cyclic palette running blue -> pink -> red -> orange -> yellow -> white ->
-// pink -> blue. Starts and ends on blue so it tiles seamlessly with fract().
-vec3 meshPalette(float h){
+// Continuous palette (no hard stops): blue -> pink -> red -> orange -> yellow
+// -> white. Wide overlaps so colour flows smoothly with zero banding.
+vec3 smoothPalette(float s){
+  s = clamp(s, 0.0, 1.0);
   vec3 c = BLUE;
-  c = mix(c, PINK,   smoothstep(0.00, 0.16, h));
-  c = mix(c, RED,    smoothstep(0.16, 0.32, h));
-  c = mix(c, ORANGE, smoothstep(0.32, 0.46, h));
-  c = mix(c, AMBER,  smoothstep(0.46, 0.58, h));
-  c = mix(c, WHITE,  smoothstep(0.58, 0.70, h));
-  c = mix(c, PINK,   smoothstep(0.70, 0.84, h));
-  c = mix(c, BLUE,   smoothstep(0.84, 1.00, h));
+  c = mix(c, PINK,   smoothstep(0.04, 0.34, s));
+  c = mix(c, RED,    smoothstep(0.24, 0.50, s));
+  c = mix(c, ORANGE, smoothstep(0.44, 0.68, s));
+  c = mix(c, AMBER,  smoothstep(0.62, 0.83, s));
+  c = mix(c, WHITE,  smoothstep(0.80, 1.00, s));
   return c;
 }
 
-// Silky gradient mesh: clean directional STRIPE bands that slowly wave, drift
-// and swing their direction over time (never breaking into random patches).
+// Volumetric, twisting flame gradient via ITERATIVE DOMAIN WARPING: the colour
+// coordinate is folded through noise repeatedly, so colours curl and turn over
+// each other in 3-D like real flame — smooth throughout, never striped.
 vec3 flameMesh(vec2 uv, float aspect, float t){
-  vec2 q = vec2((uv.x - 0.5) * aspect, uv.y);
+  vec2 q = vec2((uv.x - 0.5) * aspect * 1.3, uv.y * 1.7);
+  q.y -= t * 0.6;                                   // slow upward drift
 
-  // the stripe direction slowly swings, so the bands travel in different
-  // directions over time while staying coherent stripes
-  float ang = 1.15 + 0.55 * sin(t * 0.15);
-  vec2 dir = vec2(cos(ang), sin(ang));
+  // fold 1
+  vec2 a = vec2(fbm3(q + vec2(0.0, 1.0) + t * 0.25),
+                fbm3(q + vec2(5.2, 1.3) - t * 0.2));
+  // fold 2 (warped by fold 1) -> the twisting, curling structure
+  vec2 b = vec2(fbm3(q + 3.0 * a + vec2(1.7, 9.2) + t * 0.3),
+                fbm3(q + 3.0 * a + vec2(8.3, 2.8) - t * 0.22));
+  // final field, warped again
+  float f = fbm3(q + 3.0 * b);
 
-  // gentle, low-frequency wave along the stripes -> silky, not random
-  float wave = fbm3(q * 1.1 + vec2(0.0, -t * 0.35)) - 0.5;
+  // smooth continuous colour spanning the whole palette, twisted so hot & cool
+  // fold through one another in 3-D
+  float s = smoothstep(0.32, 0.68, f) + 0.10;        // widen spread, warmer base
+  float cool = smoothstep(0.54, 0.30, b.y);          // cool valleys -> blue accent
+  float hot  = smoothstep(0.52, 0.86, a.x + b.x * 0.6); // hot ridges -> yellow
+  // cap so the interior stays SATURATED (never near-white -> the solid shape
+  // always reads against the white page); white is reserved for tiny sheens.
+  s = clamp(s - cool * 0.22 + hot * 0.34, 0.05, 0.86);
+  vec3 col = smoothPalette(s);
 
-  float coord = dot(q, dir) * 2.7 + wave * 1.6 + t * 0.22;
-  float h = fract(coord);
-
-  vec3 col = meshPalette(h);
-
-  // a second, softer stripe set drifting the other way adds depth (still banded)
-  float coord2 = dot(q, vec2(-dir.y, dir.x)) * 1.7 - t * 0.13 + wave * 1.1;
-  col = mix(col, meshPalette(fract(coord2)), 0.32);
+  // fake 3-D relief: thin white sheen only on the sharpest warp ridges
+  float ridge = smoothstep(0.62, 0.98, length(b - a));
+  col = mix(col, WHITE, ridge * 0.22);
   return col;
 }
 
@@ -144,7 +151,7 @@ void main(){
   // stretched vertically so it reads as tall licking tongues.
   float n = fbm3(vec2(pw.x * 3.2, pw.y * 0.85 - t * 1.0));
   n += (fbm3(vec2(pw.x * 6.4, pw.y * 1.6 - t * 1.3) + 21.0) - 0.5) * 0.35;
-  n = smoothstep(0.26, 0.74, n);                      // contrast -> defined tongues
+  n = smoothstep(0.33, 0.69, n);                      // contrast -> defined tongues
 
   // vertical envelope: fire is strong at the base and tapers as it climbs
   float band = 0.5;
@@ -157,12 +164,13 @@ void main(){
 
   // flame density field
   float raw = n * taper;
-  // continuous solid base full-width, so the flames read as one connected form
-  raw += smoothstep(0.34, 0.0, by) * 0.42;
+  // continuous solid base full-width, so the flames always read as one
+  // connected fire (never floating blobs) with tongues rising out of it
+  raw += smoothstep(0.5, 0.0, by) * 0.55;
 
   // HARD, pixel-crisp edge: clip the field at a threshold with ~1px anti-alias
   // (derivative-based) so the shape is sharply defined, not a soft dissolve.
-  float edge = raw - 0.46;
+  float edge = raw - 0.42;
   float aa = max(fwidth(edge), 1e-4);
   float alpha = smoothstep(-aa, aa, edge);
 

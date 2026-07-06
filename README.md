@@ -43,10 +43,11 @@ slow‑fire feel:
 - the edge is **hard‑clipped**: the density field is thresholded with a
   derivative‑based (`fwidth`) ~1‑pixel anti‑alias, so the silhouette is sharply
   defined — clipped, not a soft dissolve,
-- the fill is a separate **stripe mesh**: two sets of clean colour bands running a
-  cyclic palette blue → pink → red → orange → yellow → white, slowly waving and
-  swinging their direction over time so the stripes travel in different directions
-  while never breaking into random patches,
+- the fill is a **volumetric twisting gradient** built with *iterative domain
+  warping* — the colour coordinate is folded through noise several times, so the
+  colours curl and turn over one another in 3‑D like real flame (smooth
+  everywhere, never striped); a continuous blue → pink → red → orange → yellow
+  palette with cool blue valleys, warm ridges and thin white sheens for depth,
 - the cursor bends the tongues toward it and feeds them extra height,
 - a touch of dither removes any residual 8‑bit banding.
 
