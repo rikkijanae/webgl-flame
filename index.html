@@ -121,8 +121,14 @@ vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
 
   // density -> swoopy tongues, kept low by the envelope
   float env = smoothstep(topH, 0.0, uv.y);
-  float shape = smoothstep(shapeLo, shapeLo + 0.38, flow);
-  float density = shape * env * 2.4 + smoothstep(topH * 0.55, 0.0, uv.y) * baseAmt;
+  // carve real flame tongues into the front: perturb it with finer, vertically-
+  // biased detail (so tongues are tall & thin) then sharpen so tips come to a
+  // point, the U-shaped notches cut deep into the body, and licks split into forks
+  float ff = flow + (fbm3(vec2(fq.x * 3.4, fq.y * 1.6) + 12.0) - 0.5) * 0.30;
+  ff += (fbm3(vec2(fq.x * 7.0, fq.y * 3.0) + 60.0) - 0.5) * 0.15; // finer forks
+  float shape = smoothstep(shapeLo, shapeLo + 0.34, ff);
+  shape = pow(shape, 1.35);                             // pointed tips, deep notches
+  float density = shape * env * 2.4 + smoothstep(0.022, 0.0, uv.y) * baseAmt;
   float d = density - 0.5;
   float alpha = clamp(smoothstep(-0.34, 0.16, d), 0.0, 1.0); // wider -> softer blur
 
@@ -175,13 +181,13 @@ void main(){
 
   // midground: the main body of the fire
   vec4 L1 = flameLayer(uv, aspect, tt, t, 0.0, 1.7, 1.5, 0.66,
-                       0.045 + lift, 0.58, 0.26, 0.0);
+                       0.07 + lift, 0.58, 0.26, 0.0);
   outc = mix(outc, L1.rgb, L1.a);
   cov *= 1.0 - L1.a;
 
   // foreground: taller, sharper, faster, sparser tongues out in front
   vec4 L2 = flameLayer(uv, aspect, tt, t, 5.7, 2.35, 1.9, 0.85,
-                       0.065 + lift, 0.34, 0.42, 0.0);
+                       0.11 + lift, 0.30, 0.34, 0.0);
   outc = mix(outc, L2.rgb, L2.a);
   cov *= 1.0 - L2.a;
 
