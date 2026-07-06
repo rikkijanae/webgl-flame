@@ -37,18 +37,18 @@ field** — the same field shapes the silhouette *and* colours it, so the shape
 swoops exactly with the gradient. Everything moves slowly for a silky slow‑fire
 feel:
 
-- the flow is built with **iterative domain warping** (the coordinate is folded
-  through low‑octave noise several times), so colours curl and turn over one
-  another in 3‑D like real flame — smooth everywhere, never striped or banded,
-- the **shape** is a swoopy, never‑straight flame front driven by that same flow,
-  confined to the **bottom quarter** of the page,
+- one **upward‑scrolling flow field** (built with iterative domain warping) feeds
+  BOTH the flame shape and its colour, so when a flame pulls up its gradient pulls
+  up with it — a single motion, not two. The colours curl and fold over one
+  another in 3‑D, smooth everywhere, never striped,
+- the **shape** is a flame‑density field carved from that flow into swoopy,
+  never‑straight tongues, kept in the **bottom quarter** of the page,
+- the **edge** is soft and slightly **blurred** into the page (not a hard clip),
+- **rising ember specks** float up out of the fire and fade away, and a subtle
+  **film grain** sits over the whole thing for texture and dimension,
 - the **colour** runs a continuous blue → pink → red → orange → yellow → white
-  palette with cool blue valleys, warm ridges, white ridge sheens, and a brighter
-  **rim gradient** right at the flame edge — giving it dimension,
-- the **edge dissolves into the page** with a soft rim plus **tiny animated grain**
-  that breaks it into embers, like real fire fading into the air,
-- the cursor draws the flames upward toward it,
-- a touch of dither removes any residual 8‑bit banding.
+  palette with cool valleys, warm ridges, sheens and a brighter edge rim,
+- the cursor locally lifts the fire, pulling flames and colour up together.
 
 The cursor position is smoothed in JS and passed to the shader as a uniform. Touch
 is supported too.
