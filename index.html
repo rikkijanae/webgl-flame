@@ -126,10 +126,15 @@ vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
   float alpha = clamp(smoothstep(-0.22, 0.14, d), 0.0, 1.0);
 
   // twisting colour from the same flow
-  float s = smoothstep(0.30, 0.70, flow) + 0.10;
+  float s = smoothstep(0.30, 0.70, flow) + 0.05;
   float cool = smoothstep(0.54, 0.28, b.y);
   float hot  = smoothstep(0.52, 0.88, a.x + b.x * 0.6);
-  s = clamp(s - cool * 0.26 + hot * 0.34, 0.05, 0.90);
+  s = s - cool * 0.26 + hot * 0.20;
+  // break up large flat (yellow) patches with finer marbled colour detail so
+  // they get streaked through with orange / red / pink, never one flat block
+  s += (fbm3(fq * 4.6 + 40.0) - 0.5) * 0.32;
+  s += (fbm3(fq * 9.5 + 70.0) - 0.5) * 0.18;
+  s = clamp(s, 0.05, 0.84);
   vec3 col = smoothPalette(s);
   float ridge = smoothstep(0.58, 0.98, length(b - a));
   col = mix(col, WHITE, ridge * 0.20);
@@ -157,9 +162,9 @@ void main(){
   vec3 outc = vec3(1.0);
   float cov = 1.0;                                    // running "still white" amount
 
-  // far background: low, slow, broad, hazy
+  // far background: low, slow, sparser dim flames (not a broad pale wash)
   vec4 L0 = flameLayer(uv, aspect, tt, t, 17.3, 1.05, 1.15, 0.52,
-                       0.20 + lift, 0.50, 0.30, 0.44);
+                       0.20 + lift, 0.34, 0.40, 0.30);
   outc = mix(outc, L0.rgb, L0.a * 0.9);
   cov *= 1.0 - L0.a * 0.9;
 
