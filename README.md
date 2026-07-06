@@ -32,27 +32,23 @@ python3 -m http.server 8000
 
 ## How it works
 
-A full‑screen fragment shader builds a **solid flame silhouette** and fills it
-with a **flowing striped gradient mesh**. Everything moves slowly for a silky,
-slow‑fire feel:
+A full‑screen fragment shader drives the flame from a single **twisting flow
+field** — the same field shapes the silhouette *and* colours it, so the shape
+swoops exactly with the gradient. Everything moves slowly for a silky slow‑fire
+feel:
 
-- the shape comes from **smooth low‑octave value‑noise** (few octaves, quintic‑
-  smoothed) stretched vertically and gently domain‑warped — clean curves, no
-  high‑frequency fuzz; a full‑width solid base keeps the tongues one connected
-  form,
-- the edge is **hard‑clipped**: the density field is thresholded with a
-  derivative‑based (`fwidth`) ~1‑pixel anti‑alias, so the silhouette is sharply
-  defined — clipped, not a soft dissolve,
-- the fill is a **volumetric twisting gradient** built with *iterative domain
-  warping* — the colour coordinate is folded through noise several times, so the
-  colours curl and turn over one another in 3‑D like real flame (smooth
-  everywhere, never striped); a continuous blue → pink → red → orange → yellow
-  palette with cool blue valleys, warm ridges and thin white sheens for depth,
-- the cursor bends the tongues toward it and feeds them extra height,
+- the flow is built with **iterative domain warping** (the coordinate is folded
+  through low‑octave noise several times), so colours curl and turn over one
+  another in 3‑D like real flame — smooth everywhere, never striped or banded,
+- the **shape** is a swoopy, never‑straight flame front driven by that same flow,
+  confined to the **bottom quarter** of the page,
+- the **colour** runs a continuous blue → pink → red → orange → yellow → white
+  palette with cool blue valleys, warm ridges, white ridge sheens, and a brighter
+  **rim gradient** right at the flame edge — giving it dimension,
+- the **edge dissolves into the page** with a soft rim plus **tiny animated grain**
+  that breaks it into embers, like real fire fading into the air,
+- the cursor draws the flames upward toward it,
 - a touch of dither removes any residual 8‑bit banding.
-
-Requires the `OES_standard_derivatives` WebGL extension (universal on modern
-browsers) for the hard edge.
 
 The cursor position is smoothed in JS and passed to the shader as a uniform. Touch
 is supported too.

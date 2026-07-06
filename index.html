@@ -97,35 +97,25 @@ vec3 smoothPalette(float s){
   return c;
 }
 
-// Volumetric, twisting flame gradient via ITERATIVE DOMAIN WARPING: the colour
-// coordinate is folded through noise repeatedly, so colours curl and turn over
-// each other in 3-D like real flame — smooth throughout, never striped.
-vec3 flameMesh(vec2 uv, float aspect, float t){
-  vec2 q = vec2((uv.x - 0.5) * aspect * 1.3, uv.y * 1.7);
-  q.y -= t * 0.6;                                   // slow upward drift
-
-  // fold 1
-  vec2 a = vec2(fbm3(q + vec2(0.0, 1.0) + t * 0.25),
-                fbm3(q + vec2(5.2, 1.3) - t * 0.2));
-  // fold 2 (warped by fold 1) -> the twisting, curling structure
-  vec2 b = vec2(fbm3(q + 3.0 * a + vec2(1.7, 9.2) + t * 0.3),
-                fbm3(q + 3.0 * a + vec2(8.3, 2.8) - t * 0.22));
-  // final field, warped again
-  float f = fbm3(q + 3.0 * b);
-
-  // smooth continuous colour spanning the whole palette, twisted so hot & cool
-  // fold through one another in 3-D
-  float s = smoothstep(0.32, 0.68, f) + 0.10;        // widen spread, warmer base
-  float cool = smoothstep(0.54, 0.30, b.y);          // cool valleys -> blue accent
+// Volumetric, twisting flame colour from the shared iterative-domain-warp flow
+// (computed once in main). Colours fold over one another in 3-D like real flame;
+// white ridge sheens and a hotter rim near the flame edge give it dimension.
+// `d` is the signed distance into the flame (>0 inside, ~0 at the edge).
+vec3 flameColor(vec2 a, vec2 b, float flow, float d){
+  float s = smoothstep(0.32, 0.68, flow) + 0.10;       // widen spread, warmer base
+  float cool = smoothstep(0.54, 0.30, b.y);            // cool valleys -> blue accent
   float hot  = smoothstep(0.52, 0.86, a.x + b.x * 0.6); // hot ridges -> yellow
-  // cap so the interior stays SATURATED (never near-white -> the solid shape
-  // always reads against the white page); white is reserved for tiny sheens.
-  s = clamp(s - cool * 0.22 + hot * 0.34, 0.05, 0.86);
+  // cap so the interior stays saturated (never near-white)
+  s = clamp(s - cool * 0.24 + hot * 0.34, 0.05, 0.86);
   vec3 col = smoothPalette(s);
 
-  // fake 3-D relief: thin white sheen only on the sharpest warp ridges
-  float ridge = smoothstep(0.62, 0.98, length(b - a));
+  // 3-D relief: white sheen on the sharpest warp ridges
+  float ridge = smoothstep(0.60, 0.98, length(b - a));
   col = mix(col, WHITE, ridge * 0.22);
+
+  // a specific brighter/hotter gradient right at the flame edge (the rim)
+  float rim = smoothstep(0.32, 0.0, d);
+  col = mix(col, smoothPalette(clamp(s + 0.26, 0.0, 0.95)), rim * 0.5);
   return col;
 }
 
@@ -137,52 +127,45 @@ void main(){
 
   vec2 p = vec2((uv.x - 0.5) * aspect, uv.y);        // centred x, y up
 
-  // gentle, slow, low-frequency domain warp -> smooth curling (no fuzz)
-  vec2 warp;
-  warp.x = fbm3(p * 1.3 + vec2(1.0, -t * 0.9)) - 0.5;
-  warp.y = fbm3(p * 1.3 + vec2(7.0, -t * 1.1) + 4.0) - 0.5;
-  vec2 pw = p + warp * 0.6;
+  // --- shared twisting flow (iterative domain warp): drives BOTH the colour
+  // and the flame silhouette, so the shape swoops exactly with the gradient ---
+  vec2 fq = vec2(p.x * 1.25, p.y * 1.7);
+  fq.y -= t * 0.6;                                    // slow upward drift
+  vec2 a = vec2(fbm3(fq + vec2(0.0, 1.0) + t * 0.25),
+                fbm3(fq + vec2(5.2, 1.3) - t * 0.2));
+  vec2 b = vec2(fbm3(fq + 3.0 * a + vec2(1.7, 9.2) + t * 0.3),
+                fbm3(fq + 3.0 * a + vec2(8.3, 2.8) - t * 0.22));
+  float flow = fbm3(fq + 3.0 * b);
 
-  // cursor bends the plume sideways toward it, more toward the tips
-  vec2 m = vec2((u_mouse.x - 0.5) * aspect, u_mouse.y);
-  pw.x -= m.x * smoothstep(0.0, 0.5, uv.y) * 0.22 * u_mouseAmt;
-
-  // flame shape from SMOOTH low-octave noise -> clean silhouette, no feathering.
-  // stretched vertically so it reads as tall licking tongues.
-  float n = fbm3(vec2(pw.x * 3.2, pw.y * 0.85 - t * 1.0));
-  n += (fbm3(vec2(pw.x * 6.4, pw.y * 1.6 - t * 1.3) + 21.0) - 0.5) * 0.35;
-  n = smoothstep(0.33, 0.69, n);                      // contrast -> defined tongues
-
-  // vertical envelope: fire is strong at the base and tapers as it climbs
-  float band = 0.5;
-  float by = uv.y / band;
-  float taper = smoothstep(1.5, -0.05, by);
-
-  // cursor feeds the flames extra height where it hovers
+  // --- SWOOPY, never-straight flame front, confined to the bottom quarter ---
+  float band = 0.24;
+  float by = uv.y / band;                            // 0..1 over the bottom quarter
+  // front height (band units) driven by the same flow -> curvy licks, no straight
+  float front = 0.88 + (b.x - 0.5) * 1.25 + (flow - 0.5) * 0.8 + (a.y - 0.5) * 0.5
+              + (fbm3(fq * 2.3 + 30.0) - 0.5) * 0.5;   // finer curling licks
+  // cursor draws the flames up toward it
   float dx = (uv.x - u_mouse.x) * aspect;
-  taper += exp(-dx * dx * 5.0) * u_mouseAmt * (0.12 + u_mouse.y * 0.8);
+  front += exp(-dx * dx * 5.0) * u_mouseAmt * (0.2 + u_mouse.y * 0.9);
+  float d = front - by;                              // signed density (>0 inside)
 
-  // flame density field
-  float raw = n * taper;
-  // continuous solid base full-width, so the flames always read as one
-  // connected fire (never floating blobs) with tongues rising out of it
-  raw += smoothstep(0.5, 0.0, by) * 0.55;
+  // --- tiny moving grain -> embery dissolve into the page at the edges ---
+  float grain = noise(vec2(uv.x * aspect * 96.0, uv.y * 96.0 - u_time * 3.5));
 
-  // HARD, pixel-crisp edge: clip the field at a threshold with ~1px anti-alias
-  // (derivative-based) so the shape is sharply defined, not a soft dissolve.
-  float edge = raw - 0.42;
-  float aa = max(fwidth(edge), 1e-4);
-  float alpha = smoothstep(-aa, aa, edge);
+  // soft, grainy edge: a rim that feathers into the white page like real fire
+  float alpha = smoothstep(-0.02, 0.18, d);          // soft outer fade
+  float ember = smoothstep(0.24, -0.05, d);          // 1 near / just past the edge
+  alpha *= 1.0 - ember * (1.0 - grain) * 0.6;        // grain breaks it into embers
+  alpha = clamp(alpha, 0.0, 1.0);
 
-  // fill the solid shape with the flowing stripe mesh
-  vec3 mesh = flameMesh(uv, aspect, t);
+  // twisting 3-D colour from the same flow (with edge rim gradient)
+  vec3 col = flameColor(a, b, flow, d);
 
-  vec3 col = mix(WHITE, mesh, alpha);
+  vec3 outc = mix(WHITE, col, alpha);
 
   // fine dither to eliminate any 8-bit colour banding
-  col += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * (1.6 / 255.0);
+  outc += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * (1.6 / 255.0);
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(outc, 1.0);
 }
 </script>
 
