@@ -37,15 +37,18 @@ field** — the same field shapes the silhouette *and* colours it, so the shape
 swoops exactly with the gradient. Everything moves slowly for a silky slow‑fire
 feel:
 
-- one **upward‑scrolling flow field** (built with iterative domain warping) feeds
-  BOTH the flame shape and its colour, so when a flame pulls up its gradient pulls
-  up with it — a single motion, not two. The colours curl and fold over one
-  another in 3‑D, smooth everywhere, never striped,
-- the **shape** is a flame‑density field carved from that flow into swoopy,
-  never‑straight tongues, kept in the **bottom quarter** of the page,
+- the fire is built from **three depth layers** composited back‑to‑front — a low,
+  slow, hazy background; the main midground; and taller, sharper, sparser tongues
+  licking up in **front**. They drift at different speeds, giving parallax depth,
+- each layer has its **own upward‑scrolling flow field** (iterative domain warping)
+  that drives BOTH its shape and its colour, so when a flame pulls up its gradient
+  pulls up with it — one motion, not two. The colours fold over one another in 3‑D,
+  smooth everywhere, never striped,
+- each layer's **shape** is a flame‑density field carved into swoopy, never‑straight
+  tongues, kept low on the page; background layers are hazed toward white for
+  atmospheric depth,
 - the **edge** is soft and slightly **blurred** into the page (not a hard clip),
-- **rising ember specks** float up out of the fire and fade away, and a subtle
-  **film grain** sits over the whole thing for texture and dimension,
+- a subtle **static film grain** sits over the fire for texture,
 - the **colour** runs a continuous blue → pink → red → orange → yellow → white
   palette with cool valleys, warm ridges, sheens and a brighter edge rim,
 - the cursor locally lifts the fire, pulling flames and colour up together.

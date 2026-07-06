@@ -97,26 +97,47 @@ vec3 smoothPalette(float s){
   return c;
 }
 
-// Volumetric, twisting flame colour from the shared iterative-domain-warp flow
-// (computed once in main). Colours fold over one another in 3-D like real flame;
-// white ridge sheens and a hotter rim near the flame edge give it dimension.
-// `d` is the signed distance into the flame (>0 inside, ~0 at the edge).
-vec3 flameColor(vec2 a, vec2 b, float flow, float d){
-  float s = smoothstep(0.32, 0.68, flow) + 0.10;       // widen spread, warmer base
-  float cool = smoothstep(0.54, 0.30, b.y);            // cool valleys -> blue accent
-  float hot  = smoothstep(0.52, 0.86, a.x + b.x * 0.6); // hot ridges -> yellow
-  // cap so the interior stays saturated (never near-white)
-  s = clamp(s - cool * 0.24 + hot * 0.34, 0.05, 0.86);
+// One DEPTH LAYER of fire. Its own upward-scrolling twisting flow drives both
+// its shape and its colour (so they move in tandem). Returns rgb + coverage.
+// Parameters place the layer in depth: background layers are lower, slower and
+// hazier; foreground layers are taller, sharper and sparser.
+//   seed   - decorrelates the layer      xs/ys  - horizontal / vertical scale
+//   speed  - upward drift rate           topH   - how high the layer reaches
+//   baseAmt- solid-base strength         shapeLo- tongue threshold (higher=sparser)
+//   haze   - mix toward white for atmospheric depth
+vec4 flameLayer(vec2 uv, float aspect, float tt, float t,
+                float seed, float xs, float ys, float speed,
+                float topH, float baseAmt, float shapeLo, float haze){
+  float rise = tt * speed + seed;
+  vec2 fq = vec2((uv.x - 0.5) * aspect * xs + seed, (uv.y - rise) * ys);
+
+  // iterative domain warp -> twisting 3-D flow
+  vec2 a = vec2(fbm3(fq + vec2(0.0, 1.0) + t * 0.2),
+                fbm3(fq + vec2(5.2, 1.3) - t * 0.15));
+  vec2 b = vec2(fbm3(fq + 3.0 * a + vec2(1.7, 9.2)),
+                fbm3(fq + 3.0 * a + vec2(8.3, 2.8)));
+  float flow = fbm3(fq + 3.0 * b);
+
+  // density -> swoopy tongues, kept low by the envelope
+  float env = smoothstep(topH, 0.0, uv.y);
+  float shape = smoothstep(shapeLo, shapeLo + 0.38, flow);
+  float density = shape * env * 2.4 + smoothstep(topH * 0.55, 0.0, uv.y) * baseAmt;
+  float d = density - 0.5;
+  float alpha = clamp(smoothstep(-0.22, 0.14, d), 0.0, 1.0);
+
+  // twisting colour from the same flow
+  float s = smoothstep(0.30, 0.70, flow) + 0.10;
+  float cool = smoothstep(0.54, 0.28, b.y);
+  float hot  = smoothstep(0.52, 0.88, a.x + b.x * 0.6);
+  s = clamp(s - cool * 0.26 + hot * 0.34, 0.05, 0.90);
   vec3 col = smoothPalette(s);
-
-  // 3-D relief: white sheen on the sharpest warp ridges
-  float ridge = smoothstep(0.60, 0.98, length(b - a));
-  col = mix(col, WHITE, ridge * 0.22);
-
-  // a specific brighter/hotter gradient right at the flame edge (the rim)
-  float rim = smoothstep(0.32, 0.0, d);
+  float ridge = smoothstep(0.58, 0.98, length(b - a));
+  col = mix(col, WHITE, ridge * 0.20);
+  float rim = smoothstep(0.30, 0.0, d);
   col = mix(col, smoothPalette(clamp(s + 0.26, 0.0, 0.95)), rim * 0.5);
-  return col;
+
+  col = mix(col, WHITE, haze);        // atmospheric haze -> sits further back
+  return vec4(col, alpha);
 }
 
 void main(){
@@ -126,50 +147,39 @@ void main(){
   float tt = u_time;
   float t  = tt * 0.12;                               // slow morph
 
-  vec2 p = vec2((uv.x - 0.5) * aspect, uv.y);        // centred x, y up
-
   // cursor locally lifts the fire (pulls flames AND their colour up together)
   float dx = (uv.x - u_mouse.x) * aspect;
   float lift = exp(-dx * dx * 4.0) * u_mouseAmt * (0.04 + u_mouse.y * 0.10);
 
-  // --- ONE upward-scrolling coordinate feeds BOTH the shape and the colour, so
-  // when a flame pulls up its gradient pulls up with it -- one motion, not two ---
-  float rise = tt * 0.05 + lift;
-  vec2 fq = vec2(p.x * 1.7, (uv.y - rise) * 1.15);   // vertical stretch -> licks
+  // --- DEPTH: three layers of fire composited back-to-front. Background flames
+  // sit lower, drift slower and are hazier; foreground flames are taller,
+  // sharper and sparser, licking up in front of the rest ---
+  vec3 outc = vec3(1.0);
+  float cov = 1.0;                                    // running "still white" amount
 
-  // iterative domain warp -> twisting 3-D flow
-  vec2 a = vec2(fbm3(fq + vec2(0.0, 1.0) + t * 0.2),
-                fbm3(fq + vec2(5.2, 1.3) - t * 0.15));
-  vec2 b = vec2(fbm3(fq + 3.0 * a + vec2(1.7, 9.2)),
-                fbm3(fq + 3.0 * a + vec2(8.3, 2.8)));
-  float flow = fbm3(fq + 3.0 * b);
+  // far background: low, slow, broad, hazy
+  vec4 L0 = flameLayer(uv, aspect, tt, t, 17.3, 1.05, 1.15, 0.85,
+                       0.20 + lift, 0.50, 0.30, 0.44);
+  outc = mix(outc, L0.rgb, L0.a * 0.9);
+  cov *= 1.0 - L0.a * 0.9;
 
-  // --- flame density carved from that same flow: swoopy tongues that rise ---
-  float top = 0.36 + lift;                           // fire lives in the low band
-  float env = smoothstep(top, 0.0, uv.y);            // 1 at base -> 0 at the top
-  float shape = smoothstep(0.26, 0.64, flow);        // contrast -> swoopy tongues
-  float density = shape * env * 2.4
-                + smoothstep(0.16, 0.0, uv.y) * 0.6; // connected base
-  float d = density - 0.5;                            // signed edge distance
+  // midground: the main body of the fire
+  vec4 L1 = flameLayer(uv, aspect, tt, t, 0.0, 1.7, 1.5, 1.05,
+                       0.32 + lift, 0.58, 0.26, 0.0);
+  outc = mix(outc, L1.rgb, L1.a);
+  cov *= 1.0 - L1.a;
 
-  // --- soft, slightly BLURRED edge (like the reference), not a hard clip ---
-  float alpha = clamp(smoothstep(-0.22, 0.14, d), 0.0, 1.0);
+  // foreground: taller, sharper, faster, sparser tongues out in front
+  vec4 L2 = flameLayer(uv, aspect, tt, t, 5.7, 2.35, 1.9, 1.35,
+                       0.42 + lift, 0.34, 0.42, 0.0);
+  outc = mix(outc, L2.rgb, L2.a);
+  cov *= 1.0 - L2.a;
 
-  // --- twisting colour from the SAME flow -> moves in tandem with the shape ---
-  vec3 col = flameColor(a, b, flow, d);
+  float coverage = 1.0 - cov;                         // 0 = white page, 1 = full fire
 
-  vec3 outc = mix(WHITE, col, alpha);
-
-  // --- rising ember specks that float up and fade out above the fire ---
-  float en = noise(vec2(uv.x * aspect * 130.0, (uv.y - tt * 0.45) * 130.0));
-  float embers = smoothstep(0.90, 1.0, en)           // fine, sparse specks
-               * smoothstep(0.50, 0.10, uv.y)        // fade as they rise
-               * (1.0 - alpha);                        // only above / around the fire
-  outc = mix(outc, smoothPalette(0.5), embers * 0.6);
-
-  // --- subtle film grain over the fire (white page stays clean) ---
-  float fg = noise(gl_FragCoord.xy * 0.9 + tt * 11.0);
-  outc += (fg - 0.5) * 0.06 * clamp(alpha + embers, 0.0, 1.0);
+  // --- subtle STATIC film grain over the fire (no motion, white page stays clean) ---
+  float fg = noise(gl_FragCoord.xy * 0.85);
+  outc += (fg - 0.5) * 0.05 * coverage;
 
   // fine dither to eliminate any 8-bit colour banding
   outc += (hash(gl_FragCoord.xy + fract(tt)) - 0.5) * (1.0 / 255.0);
@@ -227,7 +237,7 @@ void main(){
   const uMouse = gl.getUniformLocation(prog, 'u_mouse');
   const uMouseAmt = gl.getUniformLocation(prog, 'u_mouseAmt');
 
-  const DPR_CAP = 2;
+  const DPR_CAP = 1.75; // headroom for the 3 layered flow fields
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
     const w = Math.floor(window.innerWidth * dpr);
