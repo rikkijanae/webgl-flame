@@ -45,7 +45,7 @@ const vec3 RED    = vec3(0.945, 0.043, 0.039); // #F10B0A
 const vec3 BLUE   = vec3(0.216, 0.761, 0.925); // #37C2EC  (hottest)
 const vec3 WHITE  = vec3(1.0);
 
-// --- noise -----------------------------------------------------------------
+// --- smooth value noise ----------------------------------------------------
 float hash(vec2 p){
   p = fract(p * vec2(123.34, 345.45));
   p += dot(p, p + 34.345);
@@ -54,7 +54,7 @@ float hash(vec2 p){
 float noise(vec2 p){
   vec2 i = floor(p);
   vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0); // quintic -> extra-smooth
   float a = hash(i);
   float b = hash(i + vec2(1.0, 0.0));
   float c = hash(i + vec2(0.0, 1.0));
@@ -66,83 +66,61 @@ float fbm(vec2 p){
   float a = 0.5;
   for (int i = 0; i < 6; i++){
     v += a * noise(p);
-    p *= 2.0;
+    p = p * 2.0 + 7.0;
     a *= 0.5;
   }
   return v;
 }
 
-// heat (0..1) -> colour, ramping white -> amber -> orange -> pink -> red -> blue
-vec3 palette(float h){
+// heat (0..1, 1 = hottest) -> colour. Wide, overlapping transitions so the
+// whole thing reads as one seamless gradient instead of discrete bands.
+vec3 grad(float h){
   h = clamp(h, 0.0, 1.0);
   vec3 c = WHITE;
-  c = mix(c, AMBER,  smoothstep(0.00, 0.22, h));
-  c = mix(c, ORANGE, smoothstep(0.22, 0.42, h));
-  c = mix(c, PINK,   smoothstep(0.42, 0.60, h));
-  c = mix(c, RED,    smoothstep(0.60, 0.80, h));
-  c = mix(c, BLUE,   smoothstep(0.86, 1.00, h)); // blue is the hottest core
+  c = mix(c, AMBER,  smoothstep(0.00, 0.30, h));
+  c = mix(c, ORANGE, smoothstep(0.22, 0.52, h));
+  c = mix(c, PINK,   smoothstep(0.44, 0.70, h));
+  c = mix(c, RED,    smoothstep(0.64, 0.88, h));
+  c = mix(c, BLUE,   smoothstep(0.86, 1.00, h)); // hottest base -> blue
   return c;
 }
 
 void main(){
-  vec2 uv = gl_FragCoord.xy / u_resolution.xy;   // 0..1, y up
+  vec2 uv = gl_FragCoord.xy / u_resolution.xy;      // 0..1, y up
   float aspect = u_resolution.x / u_resolution.y;
 
-  // centred, aspect-corrected space; y = 0 at bottom
-  vec2 p = vec2((uv.x - 0.5) * aspect, uv.y);
+  float t = u_time * 0.11;                           // slow -> silky
 
-  float t = u_time * 0.55;
+  // low-frequency flowing noise fields, drifting in different directions
+  vec2 p = vec2(uv.x * aspect, uv.y);
+  float n1 = fbm(p * 1.5 + vec2( t,       -t * 0.6));
+  float n2 = fbm(p * 2.3 + vec2(-t * 0.8,  t * 0.4) + 11.3);
+  float n3 = fbm(p * 0.8 + vec2( t * 0.3,  t * 0.2) + 4.0);
+  float flow = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;       // ~0..1, smooth
 
-  // mouse in the same space
-  vec2 m = vec2((u_mouse.x - 0.5) * aspect, u_mouse.y);
+  // the fire lives in the bottom quarter of the screen
+  float band = 0.25;
+  float by = uv.y / band;                            // 0 at bottom, 1 at band top
 
-  // lean the whole plume toward the mouse, more at the top than the base
-  float lean = m.x * smoothstep(0.0, 1.1, uv.y) * 0.55 * u_mouseAmt;
-  p.x -= lean;
+  // heat falls off (roughly) linearly up the band so every colour gets its
+  // own generous slice of height -> a full, seamless flame gradient
+  float heat = 1.0 - by;
 
-  // rising domain warp -> licking, curling motion
-  vec2 warp;
-  warp.x = fbm(p * 3.0 + vec2(1.7, -t * 2.4));
-  warp.y = fbm(p * 3.0 + vec2(8.3, -t * 2.0));
-  vec2 q = p + (warp - 0.5) * 0.22;
+  // gentle wavy drift so the flame front breathes and licks, Stripe-smooth.
+  // faded out near the base so the blue hot foundation stays solid & even.
+  heat += (flow - 0.5) * 0.42 * smoothstep(0.0, 0.45, by);
 
-  // extra sway toward the cursor near the tongue tips
-  q.x -= (warp.x - 0.5) * m.x * 0.25 * u_mouseAmt;
+  // the cursor draws the flames upward toward it, locally & smoothly
+  float dx = (uv.x - u_mouse.x) * aspect;
+  float mbump = exp(-dx * dx * 6.0) * u_mouseAmt * (0.20 + u_mouse.y * 0.9);
+  heat += mbump;
 
-  // teardrop body: narrows as it climbs
-  float width = mix(0.20, 0.015, smoothstep(0.0, 0.95, uv.y));
-  float body  = smoothstep(width, 0.0, abs(q.x));
+  heat = clamp(heat, 0.0, 1.0);
 
-  // vertical envelope
-  float bottom = smoothstep(-0.02, 0.16, uv.y);
-  float top    = smoothstep(1.02, 0.28, uv.y);
-  float shape  = body * bottom * top;
+  // tiny dither to break up 8-bit colour banding / contour lines
+  heat += (hash(gl_FragCoord.xy + fract(u_time)) - 0.5) * 0.02;
 
-  // turbulence rising through the body -> flicker detail
-  float turb = fbm(vec2(q.x * 4.0, q.y * 3.5 - t * 4.5));
-
-  // global flicker
-  float flick = 0.82 + 0.18 * fbm(vec2(t * 3.0, 7.0));
-
-  float heat = shape * (0.5 + turb * 0.85) * flick;
-
-  // white-hot core: strongest along the central axis near the base, this is
-  // what pushes the very centre all the way up into blue (the hottest colour)
-  float core = smoothstep(0.085, 0.0, abs(q.x))
-             * smoothstep(0.62, 0.04, uv.y)
-             * (0.75 + turb * 0.5);
-  heat += core * 0.55 * flick;
-
-  // sharpen falloff so cooler wisps stay warm-coloured
-  heat = pow(clamp(heat, 0.0, 1.0), 1.2);
-
-  vec3 col = palette(heat);
-
-  // keep the background pure white, blend the flame over it by its intensity
-  float alpha = smoothstep(0.02, 0.16, heat);
-  col = mix(WHITE, col, alpha);
-
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(grad(heat), 1.0);
 }
 </script>
 
@@ -208,9 +186,9 @@ void main(){
   window.addEventListener('resize', resize);
   resize();
 
-  // mouse tracking, smoothed. default rest position: centred, low.
-  const target = { x: 0.5, y: 0.35, amt: 0 };
-  const current = { x: 0.5, y: 0.35, amt: 0 };
+  // smoothed cursor tracking. rest position: centred, low.
+  const target = { x: 0.5, y: 0.2, amt: 0 };
+  const current = { x: 0.5, y: 0.2, amt: 0 };
 
   function setFromEvent(clientX, clientY) {
     target.x = clientX / window.innerWidth;
@@ -227,14 +205,14 @@ void main(){
   );
   window.addEventListener('mouseleave', () => {
     target.x = 0.5;
-    target.y = 0.35;
+    target.y = 0.2;
     target.amt = 0.0;
   });
 
   const start = performance.now();
   function frame(now) {
     resize();
-    const k = 0.06; // smoothing
+    const k = 0.05; // smoothing -> unhurried, Stripe-like response
     current.x += (target.x - current.x) * k;
     current.y += (target.y - current.y) * k;
     current.amt += (target.amt - current.amt) * k;

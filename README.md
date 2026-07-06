@@ -1,20 +1,24 @@
 # Flame
 
-An interactive WebGL flame that burns on a pure‑white background — no black, anywhere.
+An interactive WebGL flame ribbon that burns across the bottom of a pure‑white
+page — no black, anywhere. It flows silky‑smooth (think Stripe's gradient), fills
+the bottom quarter of the viewport full‑width, and blends seamlessly with no
+visible colour bands.
 
-The fire flickers and licks upward on its own, and leans toward your cursor as you
-move the mouse near it. Colours are pulled directly from the source palette, ramped
-by heat from the cooler outer wisps to the hottest core:
+The fire drifts and breathes on its own, and the flames lean and rise toward your
+cursor as you move near them. Colours come straight from the source palette,
+ramped continuously by heat from the cool top edge down to the hottest base:
 
 | Heat | Colour | Hex |
 |------|--------|-----|
-| coolest | amber | `#FFB724` |
+| coolest (top) | white | — |
+| | amber | `#FFB724` |
 | | orange | `#FF5A18` |
 | | pink | `#F81A7D` |
 | | red | `#F10B0A` |
-| **hottest** | **blue** | `#37C2EC` |
+| **hottest (base)** | **blue** | `#37C2EC` |
 
-Blue sits at the white‑hot core, exactly where a real flame is at its hottest.
+Blue sits at the white‑hot base, exactly where a real flame is at its hottest.
 
 ## Run it
 
@@ -28,13 +32,19 @@ python3 -m http.server 8000
 
 ## How it works
 
-A full‑screen fragment shader builds the flame from layered value‑noise (fbm):
+A full‑screen fragment shader paints the ribbon:
 
-- a rising **domain warp** gives the curling, licking motion,
-- a teardrop **body** narrows as it climbs,
-- **turbulence** and a global flicker term animate the edges,
-- a central **hot core** term drives the very centre up into blue,
-- the heat value is mapped through a colour ramp and composited over white.
+- three layered, slow, low‑frequency **value‑noise** fields (quintic‑smoothed fbm)
+  drift in different directions to give a silky, flowing motion,
+- **heat** falls off up the bottom quarter of the screen, so every colour gets a
+  generous slice of height,
+- a gentle wavy **drift** makes the flame front breathe — faded out at the base so
+  the blue foundation stays solid,
+- the cursor adds a soft Gaussian **bump** to the heat, drawing the flames upward
+  toward it,
+- heat is mapped through a **wide, overlapping colour ramp** and a touch of dither
+  is added to eliminate 8‑bit banding — so the whole thing reads as one seamless
+  gradient instead of contour lines.
 
-The cursor position is smoothed in JS and passed to the shader as a uniform, bending
-the plume toward the mouse. Touch is supported too.
+The cursor position is smoothed in JS and passed to the shader as a uniform. Touch
+is supported too.
